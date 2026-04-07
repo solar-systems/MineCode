@@ -1,6 +1,6 @@
 # MineCode
 
-**MineCode** 是一个极简的 AI 代码生成代理，使用 Java 17 实现。项目灵感来自 [NanoCoder](https://github.com/he-yufeng/NanoCoder)（基于 Claude Code 设计）和 [AgentScope](https://github.com/alibaba/AgentScope) 的架构思想，将其核心设计模式提炼为一个可读、可学习、可扩展的代码代理框架。
+**MineCode** 是一个极简的 AI 代码生成代理，使用 Java 21 实现。项目灵感来自 [NanoCoder](https://github.com/he-yufeng/NanoCoder)（基于 Claude Code 设计）和 [AgentScope](https://github.com/alibaba/AgentScope) 的架构思想，将其核心设计模式提炼为一个可读、可学习、可扩展的代码代理框架。
 
 ## 核心理念
 
