@@ -1,12 +1,45 @@
 # MineCode
 
-**MineCode** 是一个极简的 AI 代码生成代理，使用 Java 21 实现。项目灵感来自 [NanoCoder](https://github.com/he-yufeng/NanoCoder)（基于 Claude Code 设计）和 [AgentScope](https://github.com/alibaba/AgentScope) 的架构思想，将其核心设计模式提炼为一个可读、可学习、可扩展的代码代理框架。
+**MineCode** 是一个极简的 AI 代码代理，使用 Java 21 实现。项目灵感来自 [NanoCoder](https://github.com/he-yufeng/NanoCoder)（Claude Code 设计模式分析），将核心设计提炼为一个可读、可学习的代码代理框架。
 
 ## 核心理念
 
-- **教育目的** - 展示代码代理的核心架构模式
-- **可扩展性** - 提供清晰的工具和 Hook 扩展接口
-- **生产可用** - 支持多种 LLM 后端
+- **教育目的** - 展示代码代理的核心 ReAct 循环架构
+- **极简设计** - 只保留核心功能，代码清晰易懂
+- **可扩展** - 提供清晰的工具扩展接口
+
+---
+
+## 核心设计：ReAct 循环
+
+```
+用户消息 -> LLM (带工具) -> 工具调用? -> 执行 -> 循环
+                      -> 文本响应? -> 返回用户
+```
+
+**核心代码**：
+
+```java
+public String chat(String userInput) throws IOException {
+    messages.add(userMessage);
+
+    for (int round = 0; round < maxRounds; round++) {
+        LLMResponse response = llm.chat(messages, tools);
+
+        // 无工具调用 -> LLM 认为任务完成
+        if (!response.hasToolCalls()) {
+            return response.content();
+        }
+
+        // 执行工具并继续循环
+        for (ToolCall tc : response.toolCalls()) {
+            String result = executeTool(tc);
+            addToolResult(tc, result);
+        }
+    }
+    return "(达到最大轮数)";
+}
+```
 
 ---
 
@@ -14,7 +47,7 @@
 
 ### 环境要求
 
-- Java 17+
+- Java 21+
 - Maven 3.6+
 
 ### 配置
@@ -24,13 +57,10 @@
 export OPENAI_API_KEY=sk-...
 
 # DeepSeek
-export OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://api.deepseek.com
+export OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://api.deepseek.com/v1
 
-# Anthropic Claude
-export ANTHROPIC_API_KEY=sk-...
-
-# Ollama (本地)
-export OPENAI_API_KEY=ollama OPENAI_BASE_URL=http://localhost:11434/v1
+# 其他 OpenAI 兼容 API
+export OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://your-api-endpoint/v1
 ```
 
 ### 运行
@@ -40,10 +70,10 @@ export OPENAI_API_KEY=ollama OPENAI_BASE_URL=http://localhost:11434/v1
 mvn clean package -DskipTests
 
 # 运行
-java -jar target/minecode-1.0.0.jar
+java -jar target/minecode-1.0.0-SNAPSHOT.jar
 
-# 或使用 Maven
-mvn exec:java -Dexec.mainClass="cn.abelib.minecode.cli.MineCodeCli"
+# 指定模型
+java -jar target/minecode-1.0.0-SNAPSHOT.jar -m gpt-4o
 ```
 
 ### 代码示例
@@ -57,116 +87,82 @@ public class Example {
             .model("gpt-4o")
             .build();
 
-        // 2. 创建 Agent
+        // 2. 创建 Agent（注册工具）
         Agent agent = Agent.builder()
             .llm(llm)
-            .hook(new BuiltinHooks.LoggingHook(true))
-            .hook(new BuiltinHooks.TokenStatsHook())
-            .hook(new BuiltinHooks.LoopDetectionHook())
+            .tool(new ReadFileTool())
+            .tool(new WriteFileTool())
+            .tool(new EditFileTool())
+            .tool(new BashTool())
+            .tool(new GlobTool())
+            .tool(new GrepTool())
             .maxRounds(30)
             .build();
 
         // 3. 执行对话
         String response = agent.chat("帮我写一个 Hello World 程序");
         System.out.println(response);
-
-        // 4. 关闭资源
-        agent.close();
     }
 }
 ```
 
 ---
 
-## 功能完成度
+## 内置工具（6个）
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| Agent 核心 | ✅ | ReAct 循环、并行执行、中断控制 |
-| LLM 客户端 | ✅ | 流式响应、多提供商支持 |
-| 工具系统 | ✅ | 7 个内置工具 + @Tool 注解 |
-| 上下文管理 | ✅ | 3 层压缩 |
-| Hook 系统 | ✅ | 9 种事件、6 个内置 Hook、Sealed Class |
-| 会话管理 | ✅ | JSONL 增量保存、多用户支持 |
-| 任务规划 | ✅ | PlanNotebook、LLM 自动分解 |
-| 工具组管理 | ✅ | 动态激活/禁用、预设模式 |
-| 技能系统 | ✅ | 13 个内置技能 |
-| 权限系统 | ✅ | 规则匹配、用户确认 |
-| 错误重试 | ✅ | 智能错误分类、指数退避 |
-| CLI | ✅ | REPL、命令解析 |
+| 工具 | 功能 |
+|-----|------|
+| `read_file` | 文件读取（带行号） |
+| `write_file` | 文件写入 |
+| `edit_file` | 搜索替换编辑（Claude Code 核心创新） |
+| `bash` | Shell 命令执行 |
+| `glob` | 文件模式搜索 |
+| `grep` | 内容搜索 |
 
----
+### 核心创新：搜索替换编辑
 
-## LLM 提供商支持
+传统文件编辑方式的问题：
 
-| 提供商 | 类 | 说明 |
-|--------|-----|------|
-| OpenAI 兼容 | `OpenAIProvider` | OpenAI、DeepSeek、Qwen、Kimi 等 |
-| Anthropic | `AnthropicProvider` | Claude 系列 |
-| Ollama | `OllamaProvider` | 本地模型 |
+| 方式 | 问题 |
+|------|------|
+| 整体重写 | Token 消耗大，不精确 |
+| 行号编辑 | 行号容易变化，不稳定 |
+| diff 补丁 | 解析复杂，容易出错 |
+
+**Claude Code 创新**：LLM 指定一个精确的子字符串及其替换，子字符串必须在文件中唯一出现。
 
 ```java
-// OpenAI
-LLMClient client = LLMClient.builder()
-    .apiKey(System.getenv("OPENAI_API_KEY"))
-    .model("gpt-4o")
-    .build();
+// edit_file 工具核心逻辑
+int occurrences = countOccurrences(content, oldString);
 
-// Anthropic Claude
-LLMClient client = LLMClient.builder()
-    .provider("anthropic")
-    .apiKey(System.getenv("ANTHROPIC_API_KEY"))
-    .model("claude-3-5-sonnet-20241022")
-    .build();
+if (occurrences == 0) return "Error: not found";
+if (occurrences > 1) return "Error: not unique";
 
-// 自定义提供商
-LLMClient client = new LLMClient(new MyCustomProvider(config));
+content = content.replace(oldString, newString);
+return generateDiff(oldContent, newContent);
 ```
 
 ---
 
-## 内置组件
+## 项目结构
 
-### 工具（7个）
-
-| 工具 | 功能 |
-|-----|------|
-| `bash` | Shell 命令执行 |
-| `read_file` | 文件读取 |
-| `write_file` | 文件写入 |
-| `edit_file` | 搜索替换编辑 |
-| `glob` | 文件模式搜索 |
-| `grep` | 内容搜索 |
-| `agent` | 子代理派生 |
-
-### Hook（6个）
-
-| Hook | 功能 |
-|------|------|
-| `LoggingHook` | 执行日志 |
-| `TokenStatsHook` | Token 统计 |
-| `TimingHook` | 执行时间统计 |
-| `HumanInTheLoopHook` | 人工介入确认 |
-| `LoopDetectionHook` | 无限循环检测 |
-| `RetryHook` | 错误自动重试 |
-
-### 技能（13个）
-
-| 技能 | 用法 |
-|------|------|
-| `/help` | 显示帮助 |
-| `/commit` | Git 提交 |
-| `/review` | 代码审查 |
-| `/explain` | 解释代码 |
-| `/refactor` | 重构建议 |
-| `/test` | 生成测试 |
-| `/tokens` | Token 统计 |
-| `/clear` | 清空对话 |
-| `/save` | 保存会话 |
-| `/load` | 加载会话 |
-| `/sessions` | 列出会话 |
-| `/config` | 显示配置 |
-| `/new` | 新建会话 |
+```
+MineCode/
+├── src/main/java/cn/abelib/minecode/
+│   ├── cli/
+│   │   └── MineCodeCli.java        # CLI 入口
+│   ├── agent/
+│   │   └── Agent.java              # 核心 ReAct 循环
+│   ├── llm/
+│   │   ├── LLMClient.java          # OpenAI 兼容客户端
+│   │   ├── LLMResponse.java        # 响应封装
+│   │   └── ToolCall.java           # 工具调用
+│   └── tools/
+│       ├── Tool.java               # 工具基类
+│       └── impl/                   # 工具实现（6个）
+└── docs/
+    └── ARCHITECTURE.md             # 架构设计文档
+```
 
 ---
 
@@ -175,76 +171,32 @@ LLMClient client = new LLMClient(new MyCustomProvider(config));
 ### 添加新工具
 
 ```java
-// 方式一：继承 Tool 基类
 public class MyTool extends Tool {
     public MyTool() {
         super("my_tool", "工具描述", buildParameters());
     }
 
+    private static ObjectNode buildParameters() {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode params = mapper.createObjectNode();
+        params.put("type", "object");
+        // ... 定义参数 schema
+        return params;
+    }
+
     @Override
     public String execute(JsonNode arguments) {
+        // 实现工具逻辑
         return "结果";
     }
 }
 
-// 方式二：使用 @Tool 注解
-public class MyTools {
-    @Tool(name = "my_tool", description = "工具描述")
-    public String myMethod(
-        @ToolParam(name = "arg1", description = "参数1") String arg1) {
-        return "结果";
-    }
-}
+// 注册到 Agent
+Agent agent = Agent.builder()
+    .llm(llm)
+    .tool(new MyTool())
+    .build();
 ```
-
-### 添加自定义 Hook
-
-```java
-Hook hook = HookBuilder.custom("MyHook", event -> {
-    if (event instanceof PreActingEvent e) {
-        log.info("执行工具: {}", e.getToolCall().name());
-    }
-});
-
-// 或实现 Hook 接口（使用 switch 模式匹配）
-public class MyHook implements Hook {
-    @Override
-    public HookEvent onEvent(HookEvent event) {
-        return switch (event) {
-            case PreActingEvent e -> { /* ... */ yield e; }
-            case PostActingEvent e -> { /* ... */ yield e; }
-            default -> event;
-        };
-    }
-}
-```
-
-### 添加自定义技能
-
-```java
-public class MySkill implements Skill {
-    @Override
-    public String name() { return "my"; }
-
-    @Override
-    public String description() { return "自定义技能"; }
-
-    @Override
-    public String execute(SkillContext context, String args) {
-        return "执行结果";
-    }
-}
-```
-
----
-
-## 代码统计
-
-| 指标 | 数值 |
-|------|------|
-| Java 源文件 | 85 个 |
-| 主代码 | 14,155 行 |
-| 测试代码 | 2,200 行 |
 
 ---
 
@@ -255,9 +207,6 @@ public class MySkill implements Skill {
 | HTTP Client | Java HttpClient | JDK 内置，支持 SSE |
 | JSON | Jackson | 生态成熟 |
 | CLI | Picocli + JLine | REPL 支持 |
-| 日志 | SLF4J + Logback | 行业标准 |
-| 并发 | CompletableFuture | 并行工具执行 |
-| Java 版本 | Java 17 | sealed class、switch 模式匹配 |
 
 ---
 
@@ -270,8 +219,6 @@ public class MySkill implements Skill {
 ## 参考资料
 
 - [NanoCoder - GitHub](https://github.com/he-yufeng/NanoCoder) - Claude Code 极简实现
-- [AgentScope-Java](https://github.com/alibaba/AgentScope) - 阿里巴巴多智能体框架
-- [Claude Code 源码分析](https://zhuanlan.zhihu.com/p/1898797658343862272)
 
 ---
 
